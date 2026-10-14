@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>فاستمسك - غراس الآخرة</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:"Times New Roman",Times,serif;background:#f7faf7}.tab-active{border-bottom:3px solid #D4AF37;color:#D4AF37;font-weight:700}.card{background:white;border-radius:1rem;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useEffect,useMemo,useState}=React;
+/* إعداد Supabase: استخدمي Project URL وPublishable/anon key فقط. ممنوع وضع service_role/secret في المتصفح. */
+const SUPABASE_URL='https://beipyodtcwvezyrzfacx.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJlaXB5b2R0Y3d2ZXp5cnpmYWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNTExMzMsImV4cCI6MjEwNjgyNzEzM30.jhKFCZxOdBDG3DKneTUUQgfYfFuKgT7f0BBIruV324k';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const LEVELS=(p=0)=>p>=400?"👑 سفيرة التلاوة":p>=300?"🏆 متميزة":p>=200?"✨ متقنة":p>=100?"📖 مجتهدة":"🌱 مبتدئة";
+
+function App(){
+ const [session,setSession]=useState(null),[me,setMe]=useState(null),[loading,setLoading]=useState(true),[currentTab,setCurrentTab]=useState("home"),[message,setMessage]=useState("");
+ const [teams,setTeams]=useState([]),[students,setStudents]=useState([]),[challenges,setChallenges]=useState([]),[submissions,setSubmissions]=useState([]),[reflections,setReflections]=useState([]);
+ async function loadProfile(id){const {data,error}=await sb.from("profiles").select("id,name,email,role,team_id,points,created_at").eq("id",id).single();if(error)throw error;setMe(data);return data}
+ async function loadPublicData(){
+  const rs=await Promise.all([
+   sb.from("teams").select("*").order("id"),
+   sb.from("profiles").select("id,name,role,team_id,points,created_at").eq("role","student").order("points",{ascending:false}),
+   sb.from("challenges").select("*").eq("active",true).order("created_at",{ascending:false}),
+   sb.from("reflections").select("id,user_id,name,text,created_at").order("created_at",{ascending:false}).limit(100)
+  ]);for(const r of rs)if(r.error)throw r.error;
+  setTeams(rs[0].data||[]);setStudents(rs[1].data||[]);setChallenges(rs[2].data||[]);setReflections(rs[3].data||[]);
+ }
+ async function loadAdminData(){const {data,error}=await sb.from("submissions").select("id,student_id,challenge_id,challenge_title,points,content,status,created_at").order("created_at",{ascending:false});if(error)throw error;setSubmissions(data||[])}
+ async function refreshAll(profile=me){await loadPublicData();if(profile?.role==="admin")await loadAdminData()}
+ useEffect(()=>{let mounted=true;(async()=>{try{const {data,error}=await sb.auth.getSession();if(error)throw error;if(!mounted)return;setSession(data.session);if(data.session?.user){const p=await loadProfile(data.session.user.id);await refreshAll(p)}}catch(e){console.error(e);setMessage("تعذر تحميل البيانات. راجعي إعدادات Supabase وSQL وRLS.")}finally{if(mounted)setLoading(false)}})();
+ const {data:listener}=sb.auth.onAuthStateChange((_event,s)=>{setSession(s);if(!s){setMe(null);setStudents([]);setTeams([]);setChallenges([]);setSubmissions([]);setReflections([]);setCurrentTab("home")}});
+ return()=>{mounted=false;listener.subscription.unsubscribe()}},[]);
+ async function logout(){await sb.auth.signOut()}
+ if(loading)return <div className="min-h-screen flex items-center justify-center text-emerald-900 font-bold">جاري تحميل منصة فاستمسك...</div>;
+ if(!session||!me)return <Login onLoggedIn={async id=>{setLoading(true);try{const p=await loadProfile(id);const {data,error}=await sb.auth.getSession();if(error)throw error;setSession(data.session);await refreshAll(p)}catch(e){setMessage(e.message||"تعذر تحميل الملف الشخصي. تأكدي من تنفيذ SQL.");throw e}finally{setLoading(false)}}}/>;
+ const isAdmin=me.role==="admin";
+ return <div className="min-h-screen pb-10">
+ {message&&<div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] bg-white border border-emerald-200 shadow-lg rounded-xl px-5 py-3"><span>{message}</span><button onClick={()=>setMessage("")} className="mr-4 text-red-600 font-bold">×</button></div>}
+ <header className="bg-[#0F2A22] text-white shadow-md px-4 md:px-8 py-4 border-b-4 border-[#D4AF37] sticky top-0 z-50"><div className="max-w-7xl mx-auto flex flex-wrap gap-4 justify-between items-center">
+ <div className="flex flex-wrap items-center gap-5"><span className="text-xl md:text-2xl font-bold text-[#D4AF37]">✨ فاستمسك | غراس الآخرة</span><nav className="flex flex-wrap gap-4 text-sm">
+ <button onClick={()=>setCurrentTab("home")} className={currentTab==="home"?"tab-active":"hover:text-[#D4AF37]"}>الرئيسية</button><button onClick={()=>setCurrentTab("challenges")} className={currentTab==="challenges"?"tab-active":"hover:text-[#D4AF37]"}>التحديات</button><button onClick={()=>setCurrentTab("padlet")} className={currentTab==="padlet"?"tab-active":"hover:text-[#D4AF37]"}>ركن التدبر</button>{isAdmin&&<button onClick={()=>setCurrentTab("admin")} className={currentTab==="admin"?"tab-active":"hover:text-[#D4AF37]"}>لوحة المشرفة</button>}
+ </nav></div><div className="flex items-center gap-3"><div className="text-left"><div className="font-bold">{me.name}</div><div className="text-xs text-emerald-200">{isAdmin?"مشرفة المنصة":`${LEVELS(me.points)} | ${me.points} نقطة`}</div></div><button onClick={logout} className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-bold">خروج</button></div>
+ </div></header><main className="p-4 md:p-6 max-w-7xl mx-auto mt-5">
+ {currentTab==="home"&&<Home teams={teams} students={students}/>}
+ {currentTab==="challenges"&&<Challenges challenges={challenges} isAdmin={isAdmin} me={me} onChanged={()=>refreshAll(me)} setMessage={setMessage}/>}
+ {currentTab==="padlet"&&<Reflections me={me} reflections={reflections} onChanged={()=>refreshAll(me)} setMessage={setMessage}/>}
+ {currentTab==="admin"&&isAdmin&&<AdminPanel teams={teams} students={students} submissions={submissions} onChanged={()=>refreshAll(me)} setMessage={setMessage}/>}
+ </main></div>
+}
+
+function Login({onLoggedIn}){
+ const [roleMode,setRoleMode]=useState("student"),[studentMode,setStudentMode]=useState("login"),[name,setName]=useState(""),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[busy,setBusy]=useState(false),[errorText,setErrorText]=useState("");
+ async function login(e){e.preventDefault();setErrorText("");setBusy(true);try{
+  const {data,error}=await sb.auth.signInWithPassword({email:email.trim().toLowerCase(),password});if(error)throw error;
+  const {data:p,error:pe}=await sb.from("profiles").select("id,name,role").eq("id",data.user.id).single();if(pe)throw pe;
+  if((p.name||"").trim()!==name.trim()){await sb.auth.signOut();throw new Error("الاسم لا يطابق الاسم المسجل لهذا البريد الإلكتروني.")}
+  if(roleMode==="admin"&&p.role!=="admin"){await sb.auth.signOut();throw new Error("هذا الحساب ليس حساب مشرفة.")}
+  if(roleMode==="student"&&p.role!=="student"){await sb.auth.signOut();throw new Error("هذا الحساب مخصص للمشرفة.")}
+  await onLoggedIn(data.user.id)
+ }catch(e){setErrorText(e.message||"تعذر تسجيل الدخول.")}finally{setBusy(false)}}
+ async function register(e){e.preventDefault();setErrorText("");setBusy(true);try{
+  if(name.trim().length<2)throw new Error("اكتبي اسم الطالبة كاملًا.");const em=email.trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em))throw new Error("أدخلي بريدًا إلكترونيًا صحيحًا.");
+  if(password.length<8)throw new Error("اجعلي كلمة المرور 8 أحرف على الأقل.");
+  const {data,error}=await sb.auth.signUp({email:em,password,options:{data:{full_name:name.trim(),name:name.trim()}}});if(error)throw error;
+  if(!data.session){setErrorText("تم إنشاء طلب الحساب. إذا كان تأكيد البريد مفعّلًا، افتحي رسالة التأكيد ثم سجلي الدخول.");return}
+  await onLoggedIn(data.user.id)
+ }catch(e){setErrorText(e.message||"تعذر إنشاء الحساب.")}finally{setBusy(false)}}
+ const registering=roleMode==="student"&&studentMode==="register";
+ return <div className="min-h-screen flex items-center justify-center bg-[#0F2A22] p-4"><div className="bg-white p-7 md:p-10 rounded-3xl shadow-2xl w-full max-w-md border-t-4 border-[#D4AF37]">
+ <div className="text-center mb-7"><h1 className="text-4xl font-black text-[#0F2A22]">✨ فاستمسك</h1><p className="text-gray-500 mt-2">حلقة غراس الآخرة لإتقان التلاوة</p></div>
+ <div className="grid grid-cols-2 bg-gray-100 rounded-xl p-1 mb-6"><button type="button" onClick={()=>{setRoleMode("student");setErrorText("")}} className={`py-2 rounded-lg font-bold ${roleMode==="student"?"bg-white shadow text-emerald-800":"text-gray-500"}`}>دخول طالبة</button><button type="button" onClick={()=>{setRoleMode("admin");setStudentMode("login");setErrorText("")}} className={`py-2 rounded-lg font-bold ${roleMode==="admin"?"bg-white shadow text-emerald-800":"text-gray-500"}`}>دخول مشرفة</button></div>
+ {roleMode==="student"&&<div className="flex gap-2 justify-center mb-5 text-sm"><button type="button" onClick={()=>setStudentMode("login")} className={`px-4 py-2 rounded-full ${studentMode==="login"?"bg-emerald-700 text-white":"bg-emerald-50 text-emerald-800"}`}>لدي حساب</button><button type="button" onClick={()=>setStudentMode("register")} className={`px-4 py-2 rounded-full ${studentMode==="register"?"bg-emerald-700 text-white":"bg-emerald-50 text-emerald-800"}`}>تسجيل طالبة جديدة</button></div>}
+ <form onSubmit={registering?register:login} className="space-y-4"><div><label className="block font-bold text-gray-700 mb-1">{roleMode==="admin"?"اسم المشرفة":"اسم الطالبة"}</label><input value={name} onChange={e=>setName(e.target.value)} required className="w-full border-2 rounded-xl px-4 py-3 outline-none focus:border-emerald-600" placeholder="الاسم الكامل"/></div>
+ <div><label className="block font-bold text-gray-700 mb-1">البريد الإلكتروني</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email" className="w-full border-2 rounded-xl px-4 py-3 outline-none focus:border-emerald-600" placeholder="example@gmail.com"/></div>
+ <div><label className="block font-bold text-gray-700 mb-1">كلمة المرور</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength="8" autoComplete={registering?"new-password":"current-password"} className="w-full border-2 rounded-xl px-4 py-3 outline-none focus:border-emerald-600" placeholder="8 أحرف على الأقل"/></div>
+ {registering&&<p className="text-xs text-gray-500">التسجيل العام للطالبات فقط. أنشئي حساب المشرفة من لوحة Supabase ثم امنحيه دور admin يدويًا.</p>}
+ {errorText&&<div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm">{errorText}</div>}
+ <button disabled={busy} className="w-full bg-[#0F2A22] hover:bg-[#1A3C34] disabled:opacity-50 text-white py-3 rounded-xl font-bold">{busy?"جاري التنفيذ...":roleMode==="admin"?"دخول المشرفة":registering?"إنشاء حساب ودخول":"دخول الطالبة"}</button></form>
+ </div></div>
+}
+
+function Home({teams,students}){
+ const teamCards=useMemo(()=>teams.map(t=>({...t,points:students.filter(s=>s.team_id===t.id).reduce((sum,s)=>sum+(s.points||0),0)})).sort((a,b)=>b.points-a.points),[teams,students]);
+ return <div className="space-y-8"><section><h2 className="text-2xl font-bold text-[#0F2A22] mb-5">🏆 سباق الفرق نحو الإتقان</h2><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{teamCards.map((t,i)=><div key={t.id} className={`card p-6 text-center border-2 ${i===0?"border-[#D4AF37]":"border-emerald-100"}`}>{i===0&&<span className="inline-block bg-[#D4AF37] text-white text-xs px-3 py-1 rounded-full mb-3">المتصدر</span>}<div className="text-xl font-bold">{t.name}</div><div className="text-4xl font-black text-emerald-800 mt-2">{t.points}</div><div className="text-sm text-gray-500">نقطة</div></div>)}</div><p className="text-xs text-gray-500 mt-2">الإعداد المستهدف: 9 طالبات موزعات على 3 فرق (3 طالبات في كل فريق عند اكتمال التوزيع).</p></section>
+ <section className="card p-6"><h2 className="text-2xl font-bold text-[#0F2A22] mb-5">🌟 لوحة شرف الطالبات ({students.length})</h2>{!students.length?<p className="text-gray-500">لم تسجل أي طالبة بعد.</p>:<div className="grid grid-cols-1 md:grid-cols-2 gap-3">{[...students].sort((a,b)=>b.points-a.points).map((s,i)=>{const t=teams.find(x=>x.id===s.team_id);return <div key={s.id} className="flex justify-between items-center p-4 border rounded-xl"><div className="flex items-center gap-3"><span className={`w-8 h-8 flex items-center justify-center rounded-full font-bold ${i<3?"bg-[#D4AF37] text-white":"bg-gray-100"}`}>{i+1}</span><div><div className="font-bold">{s.name}</div><div className="text-xs text-gray-500">{t?.name||"لم يتم توزيعها على فريق بعد"}</div></div></div><div className="text-left"><div className="font-bold text-emerald-900">{s.points} نقطة</div><div className="text-xs">{LEVELS(s.points)}</div></div></div>})}</div>}</section></div>
+}
+
+function Challenges({challenges,isAdmin,me,onChanged,setMessage}){
+ const [all,setAll]=useState([]),[title,setTitle]=useState(""),[description,setDescription]=useState(""),[points,setPoints]=useState(30);
+ const [mySubmissions,setMySubmissions]=useState([]),[answers,setAnswers]=useState({}),[savingId,setSavingId]=useState(null);
+ async function loadMySubmissions(){if(isAdmin||!me?.id)return;const {data,error}=await sb.from("submissions").select("id,student_id,challenge_id,challenge_title,points,content,status,created_at").eq("student_id",me.id).order("created_at",{ascending:false});if(error){setMessage(error.message);return}setMySubmissions(data||[]);const next={};(data||[]).forEach(s=>{if(!(s.challenge_id in next))next[s.challenge_id]=getSubmissionText(s.content)});setAnswers(prev=>({...next,...prev}));}
+ useEffect(()=>{if(isAdmin)sb.from("challenges").select("*").order("created_at",{ascending:false}).then(({data,error})=>error?setMessage(error.message):setAll(data||[]));else loadMySubmissions()},[isAdmin,me?.id,challenges]);
+ function getSubmissionText(content){if(!content)return "";try{const v=JSON.parse(content);if(v?.type==="fastamsik_submission_v1")return v.text||""}catch{}return content}
+ function latestFor(challengeId){return mySubmissions.find(s=>String(s.challenge_id)===String(challengeId))||null}
+ async function submit(ch){const content=(answers[ch.id]||"").trim();if(!content)return setMessage("اكتبي إجابتك قبل الإرسال.");setSavingId(ch.id);try{const existing=latestFor(ch.id);let result;if(existing&&existing.status==="rejected")result=await sb.from("submissions").update({content,status:"pending",points:ch.points,challenge_title:ch.title}).eq("id",existing.id).eq("student_id",me.id);else if(existing)return setMessage(existing.status==="approved"?"تم قبول إجابتك، ولا يمكن تعديلها.":"لديك تسليم بانتظار مراجعة المشرفة.");else result=await sb.from("submissions").insert({student_id:me.id,challenge_id:ch.id,challenge_title:ch.title,points:ch.points,content,status:"pending"});if(result.error)return setMessage(result.error.message);setMessage(existing?"تم تعديل الإجابة وإعادة إرسالها للمشرفة ✅":"تم إرسال الإجابة للمشرفة وبانتظار الاعتماد ✅");await loadMySubmissions()}finally{setSavingId(null)}}
+ async function add(e){e.preventDefault();const {error}=await sb.from("challenges").insert({title:title.trim(),description:description.trim(),points:Number(points),active:true});if(error)return setMessage(error.message);setTitle("");setDescription("");setPoints(30);setMessage("تمت إضافة التحدي.");await onChanged()}
+ async function edit(ch){const t=prompt("عنوان التحدي:",ch.title);if(t===null)return;const p=prompt("عدد النقاط:",ch.points);if(p===null)return;const d=prompt("وصف التحدي:",ch.description||"");if(d===null)return;if(!t.trim()||!Number.isInteger(Number(p))||Number(p)<0)return setMessage("تحققي من العنوان والنقاط.");const {error}=await sb.from("challenges").update({title:t.trim(),points:Number(p),description:d.trim()}).eq("id",ch.id);if(error)return setMessage(error.message);setMessage("تم تعديل التحدي.");await onChanged()}
+ async function toggle(ch){const {error}=await sb.from("challenges").update({active:!ch.active}).eq("id",ch.id);if(error)return setMessage(error.message);await onChanged()}
+ async function remove(ch){if(!confirm(`حذف التحدي "${ch.title}"؟`))return;const {error}=await sb.from("challenges").delete().eq("id",ch.id);if(error)return setMessage(error.message);await onChanged()}
+ const statusLabel={pending:"بانتظار مراجعة المشرفة",approved:"مقبول — تم اعتماد الإجابة",rejected:"يحتاج إلى تعديل"};
+ return <div className="space-y-7"><h2 className="text-2xl font-bold text-[#0F2A22]">🎯 التحديات الأسبوعية</h2>
+ {!isAdmin&&<div className="grid grid-cols-1 md:grid-cols-2 gap-5">{challenges.map(ch=>{const sub=latestFor(ch.id);const locked=sub&&(sub.status==="approved"||sub.status==="pending");return <div key={ch.id} className="card p-6 border border-emerald-100"><div className="flex justify-between gap-3"><h3 className="text-xl font-bold text-emerald-800">{ch.title}</h3><span className="bg-yellow-100 text-yellow-900 rounded-full px-3 py-1 h-fit text-sm font-bold">{ch.points} نقطة</span></div><p className="text-gray-600 my-4">{ch.description||"أتمّي التحدي واكتبي إجابتك."}</p>
+ {sub&&<div className={`rounded-xl p-3 mb-3 text-sm ${sub.status==="approved"?"bg-green-50 border border-green-200":sub.status==="rejected"?"bg-red-50 border border-red-200":"bg-amber-50 border border-amber-200"}`}><div className="font-bold mb-2">{statusLabel[sub.status]||sub.status}</div><div className="whitespace-pre-wrap break-words">{getSubmissionText(sub.content)}</div>{sub.status==="approved"&&<div className="mt-2 text-green-800">إجابتك محفوظة في صفحتك ولا يمكن تعديلها بعد القبول.</div>}{sub.status==="rejected"&&<div className="mt-2 text-red-800">يمكنك تعديل الإجابة أدناه ثم إعادة إرسالها.</div>}</div>}
+ {!locked&&<><label className="block font-bold text-gray-700 mb-2">{sub?.status==="rejected"?"تعديل الإجابة":"اكتبي إجابتك النصية"}</label><textarea value={answers[ch.id]||""} onChange={e=>setAnswers(prev=>({...prev,[ch.id]:e.target.value}))} rows="4" className="w-full border-2 rounded-xl p-3 outline-none focus:border-emerald-600" placeholder="اكتبي إجابتك هنا..."/><button disabled={savingId===ch.id} onClick={()=>submit(ch)} className="w-full mt-3 bg-[#0F2A22] disabled:opacity-50 text-white py-2.5 rounded-xl font-bold">{savingId===ch.id?"جاري الإرسال...":sub?.status==="rejected"?"حفظ التعديل وإعادة الإرسال":"إرسال الإجابة للمشرفة"}</button></>}
+ </div>})}{!challenges.length&&<p className="text-gray-500">لا توجد تحديات نشطة حاليًا.</p>}</div>}
+ {isAdmin&&<><form onSubmit={add} className="card p-6 border-2 border-emerald-100 space-y-3"><h3 className="text-xl font-bold text-emerald-900">➕ إضافة تحدٍ جديد</h3><input required value={title} onChange={e=>setTitle(e.target.value)} className="w-full border rounded-xl p-3" placeholder="عنوان التحدي"/><textarea value={description} onChange={e=>setDescription(e.target.value)} className="w-full border rounded-xl p-3" placeholder="وصف التحدي"/><input required type="number" min="0" value={points} onChange={e=>setPoints(e.target.value)} className="w-full border rounded-xl p-3" placeholder="النقاط"/><button className="bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold">إضافة التحدي</button></form>
+ <div className="card p-6"><h3 className="text-xl font-bold mb-4">إدارة التحديات</h3><div className="space-y-3">{all.map(ch=><div key={ch.id} className="border rounded-xl p-4 flex flex-col md:flex-row justify-between gap-3 md:items-center"><div><div className="font-bold">{ch.title} — {ch.points} نقطة</div><div className="text-sm text-gray-500">{ch.active?"نشط":"متوقف"}</div></div><div className="flex flex-wrap gap-2"><button onClick={()=>edit(ch)} className="bg-blue-100 text-blue-800 px-3 py-2 rounded-lg">تعديل</button><button onClick={()=>toggle(ch)} className="bg-yellow-100 text-yellow-900 px-3 py-2 rounded-lg">{ch.active?"إيقاف":"تفعيل"}</button><button onClick={()=>remove(ch)} className="bg-red-100 text-red-700 px-3 py-2 rounded-lg">حذف</button></div></div>)}</div></div></>}
+ </div>
+}
+function Reflections({me,reflections,onChanged,setMessage}){
+ const [text,setText]=useState("");async function add(e){e.preventDefault();if(!text.trim())return;const {error}=await sb.from("reflections").insert({user_id:me.id,name:me.name,text:text.trim()});if(error)return setMessage(error.message);setText("");await onChanged();setMessage("تم نشر الخاطرة.")}
+ return <div className="space-y-6"><h2 className="text-2xl font-bold text-[#0F2A22]">✨ ركن التدبر والفضفضة</h2><form onSubmit={add} className="card p-6 space-y-3 border border-emerald-100"><label className="font-bold">شاركي خاطرة أو تدبرًا أو شعورًا:</label><textarea required value={text} onChange={e=>setText(e.target.value)} rows="3" className="w-full border-2 rounded-xl p-4 outline-none focus:border-emerald-500" placeholder="اكتبي هنا..."/><button className="bg-[#D4AF37] text-[#0F2A22] px-8 py-2.5 rounded-xl font-bold">نشر</button></form><div className="columns-1 md:columns-3 gap-5">{reflections.map(r=><div key={r.id} className="break-inside-avoid bg-yellow-50 p-5 mb-5 rounded-2xl border border-yellow-200"><p className="leading-relaxed">“{r.text}”</p><div className="font-bold text-emerald-800 text-sm mt-4 border-t pt-3">✍️ {r.name}</div></div>)}</div></div>
+}
+
+function SubmissionContent({content}){
+  let parsed=null;try{const value=JSON.parse(content||"");if(value?.type==="fastamsik_submission_v1")parsed=value}catch{}
+  if(!parsed)return <div className="text-sm text-gray-700 mt-1 whitespace-pre-wrap break-words">المشاركة: {content||"—"}</div>;
+  return <div className="mt-2 space-y-2">{parsed.text&&<div className="text-sm text-gray-700 whitespace-pre-wrap break-words"><span className="font-bold">الإجابة الكتابية: </span>{parsed.text}</div>}{parsed.image&&<div><div className="text-sm font-bold text-gray-700 mb-1">الصورة المرفقة{parsed.imageName?` — ${parsed.imageName}`:""}</div><a href={parsed.image} target="_blank" rel="noreferrer"><img src={parsed.image} alt="صورة تسليم الطالبة" className="max-w-full max-h-72 rounded-xl border object-contain bg-gray-50"/></a></div>}</div>
+}
+
+function AdminPanel({teams,students,submissions,onChanged,setMessage}){
+ async function approve(s){const {error}=await sb.rpc("approve_submission",{p_submission_id:s.id});if(error)return setMessage(error.message);setMessage("تم قبول التحدي وإضافة النقاط للطالبة ✅");await onChanged()}
+ async function reject(s){const {error}=await sb.rpc("reject_submission",{p_submission_id:s.id});if(error)return setMessage(error.message);setMessage("تم رفض التسليم، ويمكن للطالبة تعديله وإعادة إرساله.");await onChanged()}
+ async function keep(s){setMessage("تم الإبقاء على التسليم كما هو دون حذف أو تغيير.")}
+ async function removeSubmission(s){if(!confirm("هل تريدين حذف هذا التسليم نهائيًا؟"))return;const {error}=await sb.from("submissions").delete().eq("id",s.id);if(error)return setMessage(error.message);setMessage("تم حذف التسليم.");await onChanged()}
+ async function team(id,teamId){const {error}=await sb.from("profiles").update({team_id:teamId?Number(teamId):null}).eq("id",id);if(error)return setMessage(error.message);setMessage("تم تحديث فريق الطالبة.");await onChanged()}
+ async function give(s){const raw=prompt(`كم نقطة تريدين إضافتها إلى ${s.name}؟ (الرقم السالب للخصم)`,"10");if(raw===null)return;const amount=Number(raw);if(!Number.isInteger(amount)||amount===0)return setMessage("أدخلي عددًا صحيحًا غير صفري.");const reason=prompt("سبب إضافة/خصم النقاط:","مشاركة متميزة");if(reason===null)return;const {error}=await sb.rpc("add_points",{p_student_id:s.id,p_amount:amount,p_reason:reason});if(error)return setMessage(error.message);setMessage("تم تحديث النقاط.");await onChanged()}
+ return <div className="space-y-8"><section className="card p-6 border-2 border-emerald-600"><h2 className="text-2xl font-bold text-emerald-900">📥 إدارة تسليمات الطالبات</h2><p className="text-gray-500 text-sm mt-1 mb-5">القبول يضيف نقاط التحدي آليًا، والرفض يتيح للطالبة تعديل إجابتها. يمكنكِ أيضًا إبقاء التسليم أو حذفه.</p>{!submissions.length?<div className="bg-gray-50 p-8 text-center rounded-xl">لا توجد تسليمات حتى الآن.</div>:<div className="space-y-3">{submissions.map(s=>{const st=students.find(x=>x.id===s.student_id);const statusText=s.status==="approved"?"مقبول":s.status==="rejected"?"مرفوض — بانتظار التعديل":"معلق";return <div key={s.id} className="border rounded-xl p-4 flex flex-col gap-4"><div><div className="font-bold text-lg">{st?.name||"طالبة"}</div><div className="text-emerald-700 font-bold">{s.challenge_title} (+{s.points} نقطة)</div><div className="text-xs mt-1 text-gray-500">الحالة: {statusText}</div><SubmissionContent content={s.content}/></div><div className="flex flex-wrap gap-2">{s.status!=="approved"&&<button onClick={()=>approve(s)} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold">✓ قبول</button>}{s.status!=="rejected"&&s.status!=="approved"&&<button onClick={()=>reject(s)} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg font-bold">✗ رفض</button>}<button onClick={()=>keep(s)} className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-bold">إبقاء</button><button onClick={()=>removeSubmission(s)} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-bold">حذف التسليم</button></div></div>})}</div>}</section>
+ <section className="card p-6"><h2 className="text-2xl font-bold text-[#0F2A22] mb-2">👥 إدارة الطالبات والفرق والنقاط</h2><p className="text-sm text-gray-500 mb-5">الهدف 9 طالبات و3 فرق. تظهر الحسابات المسجلة في profiles تلقائيًا عند سماح إعدادات قاعدة البيانات.</p><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-sm"><thead className="bg-emerald-50"><tr><th className="p-3 text-right">الطالبة</th><th className="p-3 text-right">النقاط</th><th className="p-3 text-right">المستوى</th><th className="p-3 text-right">الفريق</th><th className="p-3 text-right">إجراء</th></tr></thead><tbody>{students.map(s=><tr key={s.id} className="border-b"><td className="p-3 font-bold">{s.name}</td><td className="p-3">{s.points}</td><td className="p-3">{LEVELS(s.points)}</td><td className="p-3"><select value={s.team_id||""} onChange={e=>team(s.id,e.target.value)} className="border rounded-lg px-3 py-2"><option value="">بدون فريق</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></td><td className="p-3"><button onClick={()=>give(s)} className="bg-[#D4AF37] text-[#0F2A22] px-4 py-2 rounded-lg font-bold">إضافة/خصم نقاط</button></td></tr>)}</tbody></table></div></section>
+ <section className="card p-6 bg-emerald-50 border border-emerald-200"><h3 className="font-bold text-emerald-900">🔐 ملاحظات الصلاحيات</h3><p className="text-sm text-gray-700 mt-2">إخفاء الأزرار وحده لا يحمي البيانات. نفّذي ملف SQL المرفق لتفعيل RLS والتحقق من دور المشرفة داخل قاعدة البيانات. لا تمنحي دور admin من نموذج التسجيل العام.</p></section></div>
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script></body></html>
